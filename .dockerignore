@@ -1,0 +1,7 @@
+# Keep the build context tiny — only the Dockerfiles + scripts are needed.
+*.tar.gz
+*.log
+simplex-chat/
+simplexmq/
+vendor/
+.git/

@@ -1,0 +1,21 @@
+# Transfer artifacts — large; ship out-of-band, not via git
+*.tar.gz
+simplex-offline-images.tar.gz
+simplex-chat-offline-src.tar.gz
+
+# Transient logs
+*.log
+
+# Extracted source repos + build outputs on the offline host
+/simplex-chat/
+/simplexmq/
+/vendor/
+/bin/
+cabal.project.orig
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Local agent / editor state
+.claude/
