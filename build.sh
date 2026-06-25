@@ -37,6 +37,15 @@ fi
 [ -d "${SRC_DIR}" ]      || { echo "ERROR: ${SRC_DIR}/ not found — run ./setup-offline.sh first"; exit 1; }
 [ -d "${SIMPLEXMQ_DIR}" ] || { echo "ERROR: ${SIMPLEXMQ_DIR}/ not found — run ./setup-offline.sh first"; exit 1; }
 
+# Offline is enforced by `docker run --network=none` below — a hard guarantee. We do
+# NOT use cabal's `--offline`, because that mode refuses to use already-cached source
+# tarballs for packages built "inplace" (Hackage deps that transitively depend on a
+# vendored local package, e.g. yaml/wai-extra/wai-app-static via the aeson/warp forks),
+# which breaks rebuilds if dist-newstyle is removed. This shell prelude also strips any
+# `offline: True` baked into the image's cabal config (older toolchain images), so the
+# fix works without rebuilding the image.
+PRELUDE='sed -i "/^offline:/d" "${CABAL_DIR:-$HOME/.cabal}/config" 2>/dev/null || true;'
+
 run_in_toolchain() {
     # Mount BOTH repos at their fixed container paths so the sibling relationship
     # (simplex-chat <-> ../simplexmq) and the shipped dist-newstyle (created at these
@@ -45,11 +54,11 @@ run_in_toolchain() {
         -v "$PWD/${SRC_DIR}:${CONTAINER_SRC}" \
         -v "$PWD/${SIMPLEXMQ_DIR}:${CONTAINER_SIMPLEXMQ}" \
         -w "${CONTAINER_SRC}" \
-        "${TOOLCHAIN_IMAGE}" "$@"
+        --entrypoint sh "${TOOLCHAIN_IMAGE}" -ec "${PRELUDE}"' exec "$@"' _ "$@"
 }
 
 echo "==> [1/3] Building offline (no network): ${TARGETS[*]}"
-run_in_toolchain cabal build --offline "${TARGETS[@]}"
+run_in_toolchain cabal build "${TARGETS[@]}"
 
 echo "==> [2/3] Extracting binaries -> ./bin"
 rm -rf bin && mkdir -p bin
@@ -60,8 +69,8 @@ docker run --rm --network=none \
     -v "$PWD/${SIMPLEXMQ_DIR}:${CONTAINER_SIMPLEXMQ}" \
     -v "$PWD/bin:/out" \
     -w "${CONTAINER_SRC}" \
-    "${TOOLCHAIN_IMAGE}" \
-    sh -ec 'for t in "$@"; do cp "$(cabal list-bin --offline "$t")" /out/; done' _ "${DELIVERABLES[@]}"
+    --entrypoint sh "${TOOLCHAIN_IMAGE}" \
+    -ec "${PRELUDE}"' for t in "$@"; do cp "$(cabal list-bin "$t")" /out/; done' _ "${DELIVERABLES[@]}"
 ls -l bin/
 
 echo "==> [3/3] Packaging runtime image (no network): ${OUTPUT_IMAGE}"
